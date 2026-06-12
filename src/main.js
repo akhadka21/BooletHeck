@@ -10,4 +10,4 @@ const config = {
     scene: [BossBattle]
 }
 
-new Phaser.Game(config)
+new Phaser.Game(config);
