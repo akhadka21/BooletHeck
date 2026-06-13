@@ -22,6 +22,7 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         this.invuln = false;
         this.lastInvuln = 0;
         this.invulnCd = 10000;
+        this.lastDamageSound = 0;
         
         this.colorState = 'neutral';
         this.colorStates = ['neutral', 'cyan', 'magenta', 'yellow', 'green'];
@@ -138,6 +139,11 @@ class Player extends Phaser.Physics.Arcade.Sprite {
     // take damage from hazards
     takeDamageP(amount){
         if (!this.invuln){
+            const now = this.scene.time.now;
+            if (now > this.lastDamageSound + 150) {
+                this.scene.playSfx?.("phit", { volume: 0.65, seek: 0.2});
+                this.lastDamageSound = now;
+            }
             this._flashHurt();
             this.hp -= amount;
             this.scene.cameras.main.shake(100, amount * 0.001);

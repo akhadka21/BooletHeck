@@ -30,6 +30,108 @@ class BossBattle extends Phaser.Scene {
 
         this.load.image("eBullet1", "assets/esprite1/tile_0325.png");
 
+        // audio
+        this.load.audio("pshot", "assets/audio/pshot.mp3");
+        this.load.audio("edead", "assets/audio/edead.mp3");
+        this.load.audio("coin", "assets/audio/coinC.mp3");
+        this.load.audio("phit", "assets/audio/phit.mp3");
+        this.load.audio("pstep", "assets/audio/pstep.mp3");
+        this.load.audio("pheal", "assets/audio/pheal.mp3");
+        this.load.audio("powerup", "assets/audio/powerup.mp3");
+        this.load.audio("wave", "assets/audio/wave.mp3");
+        this.load.audio("crackle", "assets/audio/fcrackle.mp3");
+        this.load.audio("bgmusic", "assets/audio/bgmusic.mp3");
+    }
+
+    playSfx(key, config = {}) {
+        if (!this.sound || !this.cache.audio.exists(key)) return;
+        this.sound.play(key, config);
+    }
+
+    startLoopingSfx(key, config = {}) {
+        if (!this.sound || !this.cache.audio.exists(key)) return null;
+
+        const sound = this.sound.add(key, {
+            ...config,
+            loop: true
+        });
+        sound.play();
+        return sound;
+    }
+
+    playColorSfx(key, color, config = {}) {
+        const rates = {
+            neutral: 0.9,
+            cyan: 1.05,
+            magenta: 1.18,
+            yellow: 1.32,
+            green: 0.78
+        };
+
+        this.playSfx(key, {
+            ...config,
+            rate: rates[color] || 1
+        });
+    }
+
+    stopAllFireAudio() {
+        if (!this.fireAudios) return;
+
+        this.fireAudios.forEach((fireAudio) => {
+            if (fireAudio.sound) {
+                fireAudio.sound.stop();
+                fireAudio.sound.destroy();
+            }
+        });
+        this.fireAudios = [];
+    }
+
+    startFireAudio(pendingWarnings) {
+        const fireAudio = {
+            sound: this.startLoopingSfx("crackle", { volume: 0.55 }),
+            flames: 0,
+            warnings: pendingWarnings
+        };
+
+        this.fireAudios.push(fireAudio);
+        return fireAudio;
+    }
+
+    stopFireAudioIfDone(fireAudio) {
+        if (!fireAudio || fireAudio.flames > 0 || fireAudio.warnings > 0) return;
+
+        if (fireAudio.sound) {
+            fireAudio.sound.stop();
+            fireAudio.sound.destroy();
+        }
+        this.fireAudios = this.fireAudios.filter(audio => audio !== fireAudio);
+    }
+
+    finishFireFlame(flame) {
+        const fireAudio = flame.fireAudio;
+        if (!fireAudio) return;
+
+        flame.fireAudio = null;
+        fireAudio.flames = Math.max(0, fireAudio.flames - 1);
+        this.stopFireAudioIfDone(fireAudio);
+    }
+
+    startBgMusic() {
+        if (!this.sound || !this.cache.audio.exists("bgmusic")) return;
+
+        this.bgMusic = this.sound.add("bgmusic", {
+            loop: true,
+            volume: 0.35
+        });
+        this.bgMusic.play();
+    }
+
+    stopBgMusic() {
+        if (!this.bgMusic) return;
+
+        this.bgMusic.stop();
+        this.bgMusic.destroy();
+        this.bgMusic = null;
     }
 
     // make a moving starfield
@@ -71,6 +173,7 @@ class BossBattle extends Phaser.Scene {
         this.hpPlayerGraphics = null;
         this.powerUpGraphics = null;
         this.ShieldGraphics = null;
+        this.bgMusic = null;
 
         this.stars = [];
         // border
@@ -91,6 +194,12 @@ class BossBattle extends Phaser.Scene {
         this.flames = [];
         this.activeRings = [];
         this.powers = [];
+        this.fireAudios = [];
+        this.events.once('shutdown', () => {
+            this.stopAllFireAudio();
+            this.stopBgMusic();
+        });
+        this.startBgMusic();
 
         this.powerUpTimers = {};
         this.powerUpGraphics = this.add.graphics().setDepth(200).setScrollFactor(0);
@@ -314,6 +423,7 @@ class BossBattle extends Phaser.Scene {
         const types = ['yellow', 'cyan', 'magenta', 'green'];
         const colors = { yellow: 0xffee00, cyan: 0x00ffff, magenta: 0xff00ff, green: 0x32a852, neutral: 0xffffff };
         const type = forcedType || Phaser.Utils.Array.GetRandom(types);
+        this.playColorSfx("coin", type, { volume: 0.55 });
         
         const ring = this.add.arc(x, y, 0, 0, 360, false);
         ring.setStrokeStyle(12, colors[type], 0.8);
@@ -338,6 +448,7 @@ class BossBattle extends Phaser.Scene {
     spawnDiagonalWave(startX, type) {
         const colors = { yellow: 0xffee00, cyan: 0x00ffff, magenta: 0xff00ff, green: 0x32a852, neutral: 0xffffff };
         const color = colors[type];
+        this.playColorSfx("wave", type, { volume: 0.65 });
 
         // warning
         const warning = this.add.rectangle(startX, 0, 200, 20).setStrokeStyle(4, 0xaaaaaa, 0.8).setOrigin(0.5, 0);
@@ -435,6 +546,8 @@ class BossBattle extends Phaser.Scene {
     // create fire slash move leaving behind flames on the map that are animations and disapear with him
     createFireSlash(x, y, angle, amount, gap) {
         let offset = Phaser.Math.DegToRad(angle);
+        const fireAudio = this.startFireAudio((amount * 2) + 1);
+
         for (let i = -amount; i <= amount; i++) {
             let flameX = x + Math.cos(offset) * (i * gap);
             let flameY = y + Math.sin(offset) * (i * gap);
@@ -451,12 +564,16 @@ class BossBattle extends Phaser.Scene {
             blink(200, 18);
             // create flames that shrink over time
             this.time.delayedCall(1500, () => {
+                fireAudio.warnings = Math.max(0, fireAudio.warnings - 1);
+
                 if (warning.active) {
                     warning.destroy();
 
                     let flame = this.physics.add.sprite(flameX, flameY, "fire1");
                     flame.body.setAllowGravity(false);
                     flame.setScale(1.5);
+                    flame.fireAudio = fireAudio;
+                    fireAudio.flames++;
 
                     this.tweens.add({
                         targets: flame,
@@ -469,10 +586,13 @@ class BossBattle extends Phaser.Scene {
                     this.flames.push(flame);
 
                     flame.on('animationcomplete', () => {
+                        this.finishFireFlame(flame);
                         flame.destroy();
                         this.flames = this.flames.filter(f => f.active);
                     });
                 }
+
+                this.stopFireAudioIfDone(fireAudio);
             });
         }
     }
@@ -574,8 +694,10 @@ class BossBattle extends Phaser.Scene {
         )) {
             if (pu.powerType === 'health') {
                 this.player.hp = Math.min(this.player.maxHP, this.player.hp + 15);
+                this.playSfx("pheal", { volume: 0.75 });
             } else if (pu.powerType === 'double') {
                 this.player.doubleShot = true;
+                this.playSfx("pshot", { volume: 0.7 });
                 this.powerUpTimers['double'] = { startTime: this.time.now, duration: 5000 };
                 this.time.delayedCall(5000, () => {
                     this.player.doubleShot = false;
@@ -583,6 +705,7 @@ class BossBattle extends Phaser.Scene {
                 });
             } else if (pu.powerType === 'speed') {
                 this.player.speedBoost = true;
+                this.playSfx("powerup", { volume: 0.75 });
                 this.player.invulnCd *= 0.5; // reduce shield cooldown by 50%
                 this.player.lastInvuln = 0; // instantly refresh the cooldown
                 this.powerUpTimers['speed'] = { startTime: this.time.now, duration: 5000 };
@@ -611,6 +734,7 @@ class BossBattle extends Phaser.Scene {
                         this.pauseParticles = false;
                     });
                 }
+                this.finishFireFlame(flame);
                 flame.destroy();
                 return false;
             }
@@ -625,7 +749,7 @@ class BossBattle extends Phaser.Scene {
     let slot = 0;
 
     for (const [type, data] of Object.entries(this.powerUpTimers)) {
-        const x = 700 + slot * 50;
+        const x = 600 + slot * 50;
         const y = 575;
         const radius = 16;
         const pct = 1 - (this.time.now - data.startTime) / data.duration;

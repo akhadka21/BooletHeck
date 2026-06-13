@@ -11,8 +11,8 @@ class Credits extends Phaser.Scene {
             fontFamily: 'monospace' 
         }).setOrigin(0.5);
 
-        this.add.text(400, 300, '(TBA)', { 
-            fontSize: '24px', 
+        this.add.text(400, 300, 'Contributors: Aarohan Khadka\nImages:\n \tBoss sprite - https://goncharov-denis.itch.io/eye-boss-sprite\n \tKenny Assets - https://kenney.nl/assets \nAudio:\n \tAll sfx - https://pixabay.com/sound-effects/\n \tMusic - https://www.youtube.com/watch?v=VIop055eJhU&list=RDVIop055eJhU&start_radio=1', { 
+            fontSize: '16px', 
             fill: '#aaa',
             fontFamily: 'monospace' 
         }).setOrigin(0.5);

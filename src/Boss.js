@@ -19,6 +19,7 @@ class Boss extends Phaser.Physics.Arcade.Sprite {
         this._fireSlashTimer = null;
         this._phaseIndex = 0;
         this._lastRingTime = 0;
+        this._lastHitSound = 0;
         this.colorState = 'neutral';
         const states = ['cyan', 'magenta', 'yellow', 'green'];
         this.nextColorState = Phaser.Utils.Array.GetRandom(states);
@@ -244,13 +245,11 @@ class Boss extends Phaser.Physics.Arcade.Sprite {
 
     // change what the boss is immune to and fire a ring
     _changeImmunity() {
-        if (!this._isFiringQuad) this._fireRing();
-
-
         this.colorState = this.nextColorState;
+        if (!this._isFiringQuad) this._fireRing(this.colorState);
 
 
-        const states = ['neutral', 'cyan', 'magenta', 'yellow', 'green'];
+        const states = ['cyan', 'magenta', 'yellow', 'green'];
         this.nextColorState = Phaser.Utils.Array.GetRandom(states);
         
         const colors = { neutral: 0xffffff, cyan: 0x00ffff, magenta: 0xff00ff, yellow: 0xffee00, green: 0x32a852 };
@@ -495,11 +494,12 @@ class Boss extends Phaser.Physics.Arcade.Sprite {
     // sequence of 4 rings with delay
     _fireQuadRings() {
         this._isFiringQuad = true;
+        const types = ['cyan', 'magenta', 'yellow', 'green'];
         for (let i = 0; i < 4; i++) {
             this.scene.time.delayedCall(i * 1000, () => {
                 if (this.scene && this.active && this.scene.spawnColorRing) {
 
-                    this.scene.spawnColorRing(this.x, this.y);
+                    this.scene.spawnColorRing(this.x, this.y, Phaser.Utils.Array.GetRandom(types));
                 }
                 if (i === 3) {
                     // enforce a 5 second delay after the sequence starts
@@ -522,9 +522,9 @@ class Boss extends Phaser.Physics.Arcade.Sprite {
     }
 
     // fire a color ring based on boss state
-    _fireRing() {
+    _fireRing(type = this.colorState) {
         if (this.scene?.spawnColorRing) {
-            this.scene.spawnColorRing(this.x, this.y, this.colorState);
+            this.scene.spawnColorRing(this.x, this.y, type);
         }
     }
     
@@ -541,6 +541,10 @@ class Boss extends Phaser.Physics.Arcade.Sprite {
         if (state.name === 'death') return;
 
         this.hp = Math.max(0, this.hp - amount);
+        if (this.scene.time.now > this._lastHitSound + 60) {
+            this.scene.playSfx?.("pstep", { volume: 0.45 });
+            this._lastHitSound = this.scene.time.now;
+        }
         this._flashHurt();
 
         if (this.hp <= 0) {

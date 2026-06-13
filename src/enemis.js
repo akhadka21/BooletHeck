@@ -69,6 +69,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         this._alive = false;
         this.body.stop();
         this.scene.tweens.killTweensOf(this);
+        this.scene.playSfx?.("edead", { volume: 0.6 });
 
         if (this.scene?.spawnPowerupNearPlayer && Math.random() < 0.2) {
             this.scene.spawnPowerupNearPlayer();
