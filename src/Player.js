@@ -5,20 +5,16 @@ class Player extends Phaser.Physics.Arcade.Sprite {
         scene.physics.add.existing(this);
         this.setCollideWorldBounds(true);
         this.setScale(0.75);
-        // this.body.setSize(42, 32, true);
         this.body.setAllowGravity(false);
         this.setDepth(90)
 
         
         this.maxHP = 100
         this.hp = this.maxHP
-
         this.bullets = scene.physics.add.group();
         this.lastFired = 0;
         this.fireRate = 300;
 
-        // this.speed = 320;
-        
         this.doubleShot = false;
         this.speedBoost = false;
 
@@ -108,7 +104,6 @@ class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     setInvin(time){
-        console.log("hi");
         this.lastInvuln = time
         this.invuln = true;
         this.setTint(0x34e5eb);

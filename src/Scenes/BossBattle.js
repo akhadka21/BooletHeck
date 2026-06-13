@@ -4,7 +4,6 @@ class BossBattle extends Phaser.Scene {
     }
 
     preload() {
-        // this.load.atlasXML('eyeboss', 'assets/character_eyeboss_sheet.png', 'assets/character_eyeboss_sheet.xml');
         this.load.atlasXML('ships', 'assets/spaceShooter2_spritesheet.png', 'assets/spaceShooter2_spritesheet.xml');
         for (let i = 1; i <= 4; i++){
             this.load.image(`ship${i}`,
@@ -12,7 +11,10 @@ class BossBattle extends Phaser.Scene {
             );
         }
 
-        
+        for (let i = 0; i <= 2; i++) {
+            this.load.image(`enemy1_${i}`, `assets/esprite1/tile_038${i}.png`);
+        }
+
         for (let i = 1; i <= 3; i++) {
             this.load.image(`boss_${i}`, 
                 `assets/bosseye/EyeBoss-Sheet${i}.png`
@@ -24,6 +26,8 @@ class BossBattle extends Phaser.Scene {
         for (let i = 1; i <= 14; i++) {
             this.load.image(`fire${i}`, `assets/fire/Group 4 - 1_${i}.png`);
         }
+
+        this.load.image("eBullet1", "assets/esprite1/tile_0325.png");
 
     }
 
@@ -59,8 +63,6 @@ class BossBattle extends Phaser.Scene {
     }
 
     create() {
-        // Star field
-
         this.stars = [];
 
         for (let i = 0; i < 90; i++) {
@@ -116,26 +118,22 @@ class BossBattle extends Phaser.Scene {
         this.stateLabel = this.add.text(790, 10, 'STATE: amused', {
             fontSize: '14px', color: '#ffee00', fontFamily: 'monospace'
         }).setOrigin(1, 0).setDepth(10);
-        // this.add.rectangle(400, 46, 800, 1, 0x334466).setDepth(10);
         
         this.hpPlayerGraphics = this.add.graphics().setDepth(10);
         this.add.text(10, 560, 'PLAYER HP', {
             fontSize: '12px', color: '#aaaacc', fontFamily: 'monospace'
         }).setDepth(10);
-        // this.stateLabel = this.add.text(790, 10, 'STATE: amused', {
-        //     fontSize: '14px', color: '#ffee00', fontFamily: 'monospace'
-        // }).setOrigin(1, 0).setDepth(10);
 
         this.add.rectangle(400, 300, 800, 600).setStrokeStyle(4, 0x5566aa).setDepth(100);
 
 
         this.createFireSlash(400, 0 , 90, 10, 75);
 
-        // this.createPowerUp(100, 300, 1);
-        // this.createPowerUp(150, 300, 2);
-        // this.createPowerUp(200, 300, 3);
         this.createPowerUp(250, 300);
         this.createPowerUp(350, 300);
+
+        this.enemyManager = new EnemyManager(this);
+        this.enemyManager.init();
 
     }
 
@@ -165,11 +163,38 @@ class BossBattle extends Phaser.Scene {
 
         });
 
+        
+        this.anims.create({
+            key: "enemy1_idle",
+            frames: [
+                { key: 'enemy1_0' },
+                { key: 'enemy1_1' },
+            ],
+            frameRate: 10,
+            repeat: -1
+        });
+
+        this.anims.create({
+            key: "enemy1_death",
+            frames: [
+                { key: 'enemy1_2' },
+            ],
+            frameRate: 1,
+            repeat: 0
+        });
+
     }
 
     update(time, delta) {
-        this.player.update(this.cursors, this.spaceKey, time);
-        this.boss.update(time, delta);
+        if (this.player && this.player.active) {
+            this.player.update(this.cursors, this.spaceKey, time);
+        }
+        if (this.boss && this.boss.active) {
+            this.boss.update(time, delta);
+        }
+        if (this.enemyManager) {
+            this.enemyManager.update(time, delta);
+        }
         this._updateBossHPBar();
         this._updatePlayerHPBar();
         this._cullBullets();
@@ -223,16 +248,27 @@ class BossBattle extends Phaser.Scene {
     }
 
     _cullBullets() {
-        for (const b of [...this.player.bullets.getChildren()]) {
-            if (b.y < -60 || b.y > 660 || b.x < -60 || b.x > 860) b.destroy();
+        if (this.player?.bullets) {
+            for (const b of [...this.player.bullets.getChildren()]) {
+                if (b.y < -60 || b.y > 660 || b.x < -60 || b.x > 860) b.destroy();
+            }
         }
-        for (const b of [...this.boss.bullets.getChildren()]) {
-            if (b.y < -60 || b.y > 660 || b.x < -60 || b.x > 860) b.destroy();
+        if (this.boss?.bullets) {
+            for (const b of [...this.boss.bullets.getChildren()]) {
+                if (b.y < -60 || b.y > 660 || b.x < -60 || b.x > 860) b.destroy();
+            }
         }
     }
 
     updateStateLabel(name) {
         if (this.stateLabel) this.stateLabel.setText('STATE: ' + name);
+    }
+
+    spawnPowerupNearPlayer() {
+        if (!this.player || !this.player.active) return;
+        const rx = Phaser.Math.Clamp(this.player.x + Phaser.Math.Between(-150, 150), 50, 750);
+        const ry = Phaser.Math.Clamp(this.player.y + Phaser.Math.Between(-150, 150), 50, 550);
+        this.createPowerUp(rx, ry);
     }
 
     createFireSlash(x, y, angle, amount, gap) {
@@ -308,7 +344,7 @@ class BossBattle extends Phaser.Scene {
             this.player.getBounds(), pu.getBounds()
         )) {
             if (pu.powerType === 'health') {
-                this.player.hp = Math.min(this.player.maxHP, this.player.hp + 20);
+                this.player.hp = Math.min(this.player.maxHP, this.player.hp + 15);
             } else if (pu.powerType === 'double') {
                 this.player.doubleShot = true;
                 this.powerUpTimers['double'] = { startTime: this.time.now, duration: 5000 };
@@ -335,7 +371,6 @@ class BossBattle extends Phaser.Scene {
         this.physics.add.overlap(this.player, this.flames, (obj1, obj2) => {
             obj2.destroy();
             this.flames = this.flames.filter(f => f.active);
-            console.log("hi");
             obj1.takeDamageP(5);
             if (this.pauseParticles) {
                 this.time.delayedCall(500, () => {
@@ -381,17 +416,7 @@ class BossBattle extends Phaser.Scene {
     }
     
     _drawShieldUpTimers() {
-        
-        console.log(this.player.lastInvuln)
-        console.log(this.player.invulnCd)
-        console.log(this.time)
-        console.log("------")
-
-        
-        
-
         if(this.player.lastInvuln + this.player.invulnCd < this.time.now){
-            // this.ShieldGraphics.clear();
             return;
         }
 
@@ -419,4 +444,5 @@ class BossBattle extends Phaser.Scene {
 
         
     }
+
 }
