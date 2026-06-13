@@ -1,5 +1,6 @@
 class Enemy extends Phaser.Physics.Arcade.Sprite {
-    constructor(scene, x, y) {
+    // enemy constructor setup color and movement
+    constructor(scene, x, y, type = 'neutral') {
         super(scene, x, y, 'enemy1_0');
         scene.add.existing(this);
         scene.physics.add.existing(this);
@@ -10,12 +11,27 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.lifetime = 25000;
         this._alive = true;
         this._expireTimer = null;
+        this.enemyType = type;
+        this.enemyColor = 'neutral';
+
+        if (type === 'colored') {
+            const colors = ['cyan', 'magenta', 'yellow', 'green'];
+            this.enemyColor = Phaser.Utils.Array.GetRandom(colors);
+            this._updateVisuals();
+        }
 
         this.anims.play('enemy1_idle', true);
         this._moveRandomly();
         this._scheduleExpiration();
     }
 
+    // set color of enemy based on state
+    _updateVisuals() {
+        const colors = { cyan: 0x00ffff, magenta: 0xff00ff, yellow: 0xffee00, green: 0x32a852, neutral: 0xffffff };
+        this.setTint(colors[this.enemyColor]);
+    }
+
+    // update enemy life and change color if about to expire
     update(time, delta) {
             if (!this.active || !this._alive || !this.scene) return;
 
@@ -24,10 +40,11 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
 
             const remainingTime = this.lifetime - this.lifeElapsed;
             if (remainingTime < 10000 && remainingTime > 0) {
-                this.setTint(0xffee00);
+                this.setTint(0x32a852);
             }
     }
 
+    // move to random spot on screen
     _moveRandomly() {
         if (!this.scene || !this.active || !this._alive) return;
 
@@ -45,6 +62,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         });
     }
 
+    // handle taking damage and maybe drop a powerup
     takeDamage(amount) {
         if (!this._alive) return;
 
@@ -68,12 +86,14 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         });
     }
 
+    // start the timer for enemy expiration
     _scheduleExpiration() {
         this._expireTimer = this._safeDelayedCall(this.lifetime, () => {
             this._expire();
         });
     }
 
+    // handle expiring and healing boss
     _expire() {
         if (!this._alive) return;
 
@@ -94,6 +114,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         });
     }
 
+    // helper for timed events
     _safeDelayedCall(delay, callback) {
         if (!this.scene?.time) return null;
         return this.scene.time.delayedCall(delay, () => {
@@ -101,6 +122,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         });
     }
 
+    // cleanup on destruction
     destroy(fromScene) {
         if (this._expireTimer) {
             this._expireTimer.remove(false);
@@ -112,6 +134,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
 }
 
 class EnemyManager {
+    // manage spawning and firing for all enemies
     constructor(scene) {
         this.scene = scene;
         this.enemies = [];
@@ -120,24 +143,39 @@ class EnemyManager {
         this.spawnTimer = null;
     }
 
+    // init collision and timers for spawning
     init() {
-        // Explicitly set physics world bounds to match screen size (800x600)
+
         this.scene.physics.world.setBounds(0, 0, 800, 600);
 
         this.scene.physics.add.overlap(this.scene.player.bullets, this.enemyGroup, (bullet, enemy) => {
             if (!bullet || !bullet.active || !enemy || !enemy.active) return;
+            
+            const playerColor = this.scene.player.colorState;
+
+            if (enemy.enemyColor === 'green' || (enemy.enemyColor !== 'neutral' && playerColor === enemy.enemyColor)) {
+                bullet.destroy();
+                return;
+            }
             bullet.destroy();
             enemy.takeDamage(1);
         });
 
         this.scene.physics.add.overlap(this.scene.player, this.enemyBullets, (player, bullet) => {
             if (!bullet || !bullet.active || !player || !player.active) return;
+            
+            const playerColor = player.colorState;
+
+            if (bullet.bulletColor === 'green' || (bullet.bulletColor !== 'neutral' && playerColor === bullet.bulletColor) || playerColor === 'green') {
+                bullet.destroy();
+                return;
+            }
             bullet.destroy();
             player.takeDamageP(3);
         });
 
         this.spawnTimer = this.scene.time.addEvent({
-            delay: 5500,
+            delay: 8000,
             loop: true,
             callback: () => {
                 if (this.scene?.sys.isActive()) this.spawnEnemy();
@@ -145,12 +183,13 @@ class EnemyManager {
         });
 
         this.scene.time.addEvent({
-            delay: 1500,
+            delay: 3000,
             loop: true,
             callback: () => this._fireAtPlayer()
         });
     }
 
+    // fire aimed bullet at player from a random enemy
     _fireAtPlayer() {
         if (!this.scene?.player?.active) return;
 
@@ -172,22 +211,44 @@ class EnemyManager {
         bullet.body.setAllowGravity(false);
         bullet.setDepth(50);
         bullet.setScale(1);
-        bullet.setTint(0xffee00);
+        bullet.bulletColor = shooter.enemyColor;
+        const colors = { cyan: 0x00ffff, magenta: 0xff00ff, yellow: 0xffee00, green: 0x32a852, neutral: 0xffee00 };
+        bullet.setTint(colors[shooter.enemyColor]);
         
         bullet.setVelocity(Math.cos(angle) * 200, Math.sin(angle) * 200);
         bullet.setRotation(angle + Math.PI / 2);
     }
 
+    // spawn a new enemy based on boss phase
     spawnEnemy() {
-        if (!this.scene || this.enemies.length >= 3) return;
+        if (!this.scene || this.enemies.length >= 5) return;
+
+        const neutralCount = this.enemies.filter(e => e.enemyType === 'neutral').length;
+        const coloredCount = this.enemies.length - neutralCount;
+
+        const bossPhase = this.scene.boss?._phaseIndex || 0;
+
+        let type;
+        if (bossPhase < 1) {
+            type = 'neutral';
+        } else if (neutralCount < 2 && coloredCount < 3) {
+            type = Math.random() < 0.4 ? 'neutral' : 'colored';
+        } else if (neutralCount < 2) {
+            type = 'neutral';
+        } else if (coloredCount < 3) {
+            type = 'colored';
+        } else {
+            return;
+        }
 
         const x = Phaser.Math.Between(80, 720);
         const y = Phaser.Math.Between(120, 420);
-        const enemy = new Enemy(this.scene, x, y);
+        const enemy = new Enemy(this.scene, x, y, type);
         this.enemies.push(enemy);
         this.enemyGroup.add(enemy);
     }
 
+    // update all enemies and cleanup bullets
     update(time, delta) {
         if (!this.scene) return;
         this.enemies = this.enemies.filter(e => e && e.active);
@@ -197,15 +258,18 @@ class EnemyManager {
         this._cullBullets();
     }
 
+    // add a bullet to the group
     addBullet(bullet) {
         this.enemyBullets.add(bullet);
     }
 
+    // remove enemy from tracking
     removeEnemy(enemy) {
         this.enemies = this.enemies.filter(e => e !== enemy);
         if (enemy?.active) this.enemyGroup.remove(enemy, false, false);
     }
 
+    // delete offscreen bullets
     _cullBullets() {
         for (const bullet of [...this.enemyBullets.getChildren()]) {
             if (!bullet?.active) continue;
